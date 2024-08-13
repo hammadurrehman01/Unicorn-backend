@@ -36,33 +36,37 @@ const registerUser = asyncHandler(async (req, res) => {
     if (existedUser) {
         throw new ApiError(409, "User with email or username already exists")
     }
-
-    // checking for avatar
-    const avatarLocalPath = req.files?.avatar[0]?.path;
+    
+    let avatarLocalPath;
     let coverImageLocalPath;
+
+    // Check for avatar
+    if (req.files?.avatar) {
+        avatarLocalPath = req.files?.avatar[0]?.path;
+    }
+
+    // Check for cover image
     if (req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0) {
-        coverImageLocalPath = req.files.coverImage[0].path
+        coverImageLocalPath = req.files.coverImage[0].path;
     }
 
+    // Upload avatar and cover image to Cloudinary
+    let avatarUploaded, coverImageUploaded;
 
-    if (!avatarLocalPath) {
-        throw new ApiError(400, "Avatar is required")
+    if (avatarLocalPath) {
+        avatarUploaded = await uploadOnCloudinary(avatarLocalPath);
     }
 
-    // upload avatar, coverimage on cloudinary
-    const avatarUploaded = await uploadOnCloudinary(avatarLocalPath);
-    const coverImageUploaded = await uploadOnCloudinary(coverImageLocalPath);
-    if (!avatarUploaded) {
-        throw new ApiError(400, "Avatar is required")
+    if (coverImageLocalPath) {
+        coverImageUploaded = await uploadOnCloudinary(coverImageLocalPath);
     }
-
     // create user object to store in db
     const userDetails = await User.create({
         fullName,
         email,
         password,
-        username: username.toLowerCase(),
-        avatar: avatarUploaded.url,
+        username: username?.toLowerCase(),
+        avatar: avatarUploaded?.url || "",
         coverImage: coverImageUploaded?.url || "",
     })
 
@@ -95,24 +99,17 @@ const generateAccessAndRefreshTokens = async (userId) => {
 }
 
 const loginUser = asyncHandler(async (req, res) => {
-    // req.body ==>>>>>>>>
-    // username or email ===>
-    // find the user ==>
-    // password check ===>
-    // access and refresh token
-    // send cookie
+    const { email, password } = req.body;
 
-    const { username, password } = req.body;
-
-    if (!(username && password)) {
+    if (!(email && password)) {
         throw new ApiError(400, "username or password must required")
     }
 
     const user = await User.findOne({
-        $or: [{ username }, { password }]
+        $or: [{ email }, { password }]
     })
     if (!user) {
-        throw new ApiError(404, "user with this username is not exist!")
+        throw new ApiError(404, "user with this email is not exist!")
     }
 
     const isPasswordValid = await user?.isPasswordCorrect(password);
